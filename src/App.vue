@@ -24,6 +24,23 @@
       </v-container>
     </v-main>
 
+    <v-footer class="py-6" color="grey-lighten-4">
+      <v-container>
+        <v-row justify="center">
+          <v-col cols="12" md="10" lg="8">
+            <div class="stats">
+              今日总访问量 <span id="busuanzi_today_pv">加载中...</span> 次
+              今日总访客数 <span id="busuanzi_today_uv">加载中...</span> 人
+              本站总访问量 <span id="busuanzi_site_pv">加载中...</span> 次
+              本站总访客数 <span id="busuanzi_site_uv">加载中...</span> 人
+              本页总阅读量 <span id="busuanzi_page_pv">加载中...</span> 次
+              本页总访客数 <span id="busuanzi_page_uv">加载中...</span> 人
+            </div>
+          </v-col>
+        </v-row>
+      </v-container>
+    </v-footer>
+
     <!-- Settings Dialog -->
     <v-dialog v-model="settingsDialog" max-width="500">
       <v-card>
@@ -252,5 +269,12 @@ export default {
 <style scoped>
 .fill-height {
   min-height: calc(100vh - 64px);
+}
+
+.stats {
+  display: grid;
+  gap: 6px;
+  font-size: 14px;
+  color: #424242;
 }
 </style>
