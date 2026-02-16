@@ -184,9 +184,10 @@ export default {
           return // Don't allow more input
         }
         
-        // Show the pre-generated magic number
+        // Show the pre-generated magic number and increment index
         if (magicCurrentIndex.value < magicNumbers.value.length) {
           currentValue.value = String(magicNumbers.value[magicCurrentIndex.value])
+          magicCurrentIndex.value++
           shouldResetDisplay.value = false
         }
         return
@@ -222,6 +223,12 @@ export default {
           return
         }
 
+        // Skip adding if no valid current number to add (first + after trigger)
+        if (shouldResetDisplay.value) {
+          shouldResetDisplay.value = false
+          return
+        }
+
         // Calculate the addition
         const currentNum = parseFloat(currentValue.value)
         magicRunningTotal.value += currentNum
@@ -233,7 +240,6 @@ export default {
         
         currentValue.value = String(magicRunningTotal.value)
         magicOperationsCompleted.value++
-        magicCurrentIndex.value++
         shouldResetDisplay.value = true
 
         // Check if we've reached the target
