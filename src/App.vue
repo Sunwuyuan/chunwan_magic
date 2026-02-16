@@ -183,6 +183,7 @@ export default {
     })
 
     const generateMagicNumbers = (target, count) => {
+      const MIN_VALUE_PERCENTAGE = 0.1 // Each number should be at least 10% of the average
       const numbers = []
       let remaining = parseInt(target)
       
@@ -190,7 +191,7 @@ export default {
       for (let i = 0; i < count - 1; i++) {
         // Generate a random portion of the remaining value
         const maxValue = Math.floor(remaining / (count - i))
-        const minValue = Math.floor(maxValue * 0.1) // At least 10% of average
+        const minValue = Math.floor(maxValue * MIN_VALUE_PERCENTAGE)
         const randomNum = Math.floor(Math.random() * (maxValue - minValue + 1)) + minValue
         numbers.push(randomNum)
         remaining -= randomNum

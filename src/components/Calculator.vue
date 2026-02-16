@@ -120,11 +120,10 @@ export default {
 
       // For number inputs, use the pre-generated magic number
       if (!isNaN(value) || value === '.') {
-        if (shouldResetDisplay.value || currentValue.value === '0') {
-          currentValue.value = String(props.magicNumbers[magicCounter.value])
-          shouldResetDisplay.value = false
-          magicCounter.value++
-        }
+        // Always use the pre-generated magic number in magic mode
+        currentValue.value = String(props.magicNumbers[magicCounter.value])
+        shouldResetDisplay.value = false
+        magicCounter.value++
         return
       }
 
