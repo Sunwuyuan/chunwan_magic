@@ -6,11 +6,6 @@
         <div class="display">
           {{ displayValue }}
         </div>
-        <div v-if="magicMode" class="magic-indicator">
-          <v-chip color="purple" size="small" class="mt-2">
-            魔术模式 ({{ magicCounter }}/{{ magicNumbers.length }})
-          </v-chip>
-        </div>
       </div>
 
       <!-- Calculator Buttons -->
@@ -38,17 +33,21 @@ import { ref, computed, watch } from 'vue'
 export default {
   name: 'Calculator',
   props: {
-    magicMode: {
+    magicEnabled: {
       type: Boolean,
       default: false
     },
-    magicNumbers: {
-      type: Array,
-      default: () => []
+    triggerNumber: {
+      type: String,
+      default: ''
     },
     magicTarget: {
       type: Number,
       default: 0
+    },
+    operationCount: {
+      type: Number,
+      default: 5
     }
   },
   emits: ['complete'],
@@ -57,8 +56,14 @@ export default {
     const previousValue = ref(null)
     const operation = ref(null)
     const shouldResetDisplay = ref(false)
-    const magicCounter = ref(0)
-    const magicOperationCount = ref(0)
+    
+    // Magic mode state
+    const magicActive = ref(false)
+    const magicInitialValue = ref(0)
+    const magicRunningTotal = ref(0)
+    const magicOperationsCompleted = ref(0)
+    const magicNumbers = ref([])
+    const magicCurrentIndex = ref(0)
 
     const displayValue = computed(() => {
       return currentValue.value
@@ -91,73 +96,59 @@ export default {
       { label: '', value: 'empty2' }
     ]
 
+    const generateMagicNumbers = () => {
+      const MIN_VALUE_PERCENTAGE = 0.1
+      const numbers = []
+      const target = props.magicTarget - magicInitialValue.value
+      let remaining = target
+      const count = props.operationCount
+      
+      // Generate random numbers that sum to (target - initial value)
+      for (let i = 0; i < count - 1; i++) {
+        const maxValue = Math.floor(remaining / (count - i))
+        const minValue = Math.floor(maxValue * MIN_VALUE_PERCENTAGE)
+        const randomNum = Math.floor(Math.random() * (maxValue - minValue + 1)) + minValue
+        numbers.push(randomNum)
+        remaining -= randomNum
+      }
+      
+      // Last number is whatever remains
+      numbers.push(remaining)
+      
+      // Shuffle the array
+      for (let i = numbers.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [numbers[i], numbers[j]] = [numbers[j], numbers[i]]
+      }
+      
+      return numbers
+    }
+
+    const activateMagicMode = () => {
+      magicActive.value = true
+      magicInitialValue.value = parseFloat(currentValue.value)
+      magicRunningTotal.value = magicInitialValue.value
+      magicOperationsCompleted.value = 0
+      magicCurrentIndex.value = 0
+      magicNumbers.value = generateMagicNumbers()
+      shouldResetDisplay.value = true
+    }
+
+    const checkTriggerNumber = () => {
+      if (props.magicEnabled && !magicActive.value && props.triggerNumber) {
+        if (currentValue.value === props.triggerNumber) {
+          activateMagicMode()
+          return true
+        }
+      }
+      return false
+    }
+
     const handleButtonClick = (button) => {
       if (button.value === 'empty' || button.value === 'empty2') {
         return
       }
 
-      // In magic mode, intercept number inputs
-      if (props.magicMode && magicCounter.value < props.magicNumbers.length) {
-        handleMagicMode(button)
-      } else {
-        handleNormalMode(button)
-      }
-    }
-
-    const handleMagicMode = (button) => {
-      const value = button.value
-
-      // Allow clear and backspace in magic mode
-      if (value === 'clear') {
-        clear()
-        return
-      }
-
-      if (value === 'backspace') {
-        backspace()
-        return
-      }
-
-      // For number inputs, use the pre-generated magic number
-      if (!isNaN(value) || value === '.') {
-        // Always use the pre-generated magic number in magic mode
-        currentValue.value = String(props.magicNumbers[magicCounter.value])
-        shouldResetDisplay.value = false
-        magicCounter.value++
-        return
-      }
-
-      // For operations
-      if (value === 'add' || value === 'subtract' || value === 'multiply' || value === 'divide') {
-        if (previousValue.value !== null && operation.value && !shouldResetDisplay.value) {
-          calculate()
-        }
-        previousValue.value = parseFloat(currentValue.value)
-        operation.value = value
-        shouldResetDisplay.value = true
-        magicOperationCount.value++
-        return
-      }
-
-      // For equals
-      if (value === 'equals') {
-        if (previousValue.value !== null && operation.value) {
-          calculate()
-          // Check if we've completed all magic operations
-          if (magicCounter.value >= props.magicNumbers.length) {
-            // Show the target number
-            currentValue.value = String(props.magicTarget)
-            emit('complete')
-            // Reset state
-            setTimeout(() => {
-              resetMagicMode()
-            }, 2000)
-          }
-        }
-      }
-    }
-
-    const handleNormalMode = (button) => {
       const value = button.value
 
       if (value === 'clear') {
@@ -176,23 +167,32 @@ export default {
       }
 
       if (value === 'add' || value === 'subtract' || value === 'multiply' || value === 'divide') {
-        if (previousValue.value !== null && operation.value && !shouldResetDisplay.value) {
-          calculate()
-        }
-        previousValue.value = parseFloat(currentValue.value)
-        operation.value = value
-        shouldResetDisplay.value = true
+        handleOperation(value)
         return
       }
 
       if (value === 'equals') {
-        if (previousValue.value !== null && operation.value) {
-          calculate()
-        }
+        handleEquals()
       }
     }
 
     const inputNumber = (num) => {
+      if (magicActive.value) {
+        // In magic mode, check if we've reached target or completed operations
+        if (magicRunningTotal.value >= props.magicTarget || 
+            magicOperationsCompleted.value >= props.operationCount) {
+          return // Don't allow more input
+        }
+        
+        // Show the pre-generated magic number
+        if (magicCurrentIndex.value < magicNumbers.value.length) {
+          currentValue.value = String(magicNumbers.value[magicCurrentIndex.value])
+          shouldResetDisplay.value = false
+        }
+        return
+      }
+
+      // Normal calculator input
       if (shouldResetDisplay.value) {
         currentValue.value = num === '.' ? '0.' : num
         shouldResetDisplay.value = false
@@ -203,6 +203,74 @@ export default {
         currentValue.value = currentValue.value === '0' && num !== '.' 
           ? num 
           : currentValue.value + num
+      }
+
+      // Check if trigger number was entered
+      checkTriggerNumber()
+    }
+
+    const handleOperation = (op) => {
+      if (magicActive.value) {
+        // In magic mode, only allow addition
+        if (op !== 'add') {
+          return
+        }
+
+        // Check if we've reached target or completed operations
+        if (magicRunningTotal.value >= props.magicTarget || 
+            magicOperationsCompleted.value >= props.operationCount) {
+          return
+        }
+
+        // Calculate the addition
+        const currentNum = parseFloat(currentValue.value)
+        magicRunningTotal.value += currentNum
+        
+        // Ensure we don't exceed target
+        if (magicRunningTotal.value > props.magicTarget) {
+          magicRunningTotal.value = props.magicTarget
+        }
+        
+        currentValue.value = String(magicRunningTotal.value)
+        magicOperationsCompleted.value++
+        magicCurrentIndex.value++
+        shouldResetDisplay.value = true
+
+        // Check if we've reached the target
+        if (magicRunningTotal.value >= props.magicTarget || 
+            magicOperationsCompleted.value >= props.operationCount) {
+          currentValue.value = String(props.magicTarget)
+          emit('complete')
+          setTimeout(() => {
+            resetMagicMode()
+          }, 2000)
+        }
+        return
+      }
+
+      // Normal calculator operation
+      if (previousValue.value !== null && operation.value && !shouldResetDisplay.value) {
+        calculate()
+      }
+      previousValue.value = parseFloat(currentValue.value)
+      operation.value = op
+      shouldResetDisplay.value = true
+    }
+
+    const handleEquals = () => {
+      if (magicActive.value) {
+        // In magic mode, equals shows the final target
+        currentValue.value = String(props.magicTarget)
+        emit('complete')
+        setTimeout(() => {
+          resetMagicMode()
+        }, 2000)
+        return
+      }
+
+      // Normal calculator equals
+      if (previousValue.value !== null && operation.value) {
+        calculate()
       }
     }
 
@@ -237,12 +305,14 @@ export default {
       previousValue.value = null
       operation.value = null
       shouldResetDisplay.value = false
-      if (props.magicMode) {
-        resetMagicMode()
-      }
+      resetMagicMode()
     }
 
     const backspace = () => {
+      if (magicActive.value) {
+        return // Don't allow backspace in magic mode
+      }
+      
       if (currentValue.value.length > 1) {
         currentValue.value = currentValue.value.slice(0, -1)
       } else {
@@ -251,28 +321,25 @@ export default {
     }
 
     const resetMagicMode = () => {
-      magicCounter.value = 0
-      magicOperationCount.value = 0
+      magicActive.value = false
+      magicInitialValue.value = 0
+      magicRunningTotal.value = 0
+      magicOperationsCompleted.value = 0
+      magicCurrentIndex.value = 0
+      magicNumbers.value = []
     }
 
-    // Watch for magic mode changes
-    watch(() => props.magicMode, (newVal) => {
-      if (newVal) {
-        clear()
-      } else {
+    // Watch for magic enabled changes
+    watch(() => props.magicEnabled, (newVal) => {
+      if (!newVal) {
         resetMagicMode()
       }
-    })
-
-    watch(() => props.magicNumbers, () => {
-      resetMagicMode()
     })
 
     return {
       displayValue,
       buttons,
-      handleButtonClick,
-      magicCounter
+      handleButtonClick
     }
   }
 }
@@ -301,10 +368,6 @@ export default {
   text-align: right;
   word-break: break-all;
   font-weight: bold;
-}
-
-.magic-indicator {
-  text-align: right;
 }
 
 .calculator-button {

@@ -13,9 +13,10 @@
         <v-row justify="center" align="center">
           <v-col cols="12" sm="8" md="6" lg="4">
             <Calculator 
-              :magic-mode="magicMode"
-              :magic-numbers="magicNumbers"
+              :magic-enabled="magicMode"
+              :trigger-number="triggerNumber"
               :magic-target="magicTarget"
+              :operation-count="operationCount"
               @complete="onMagicComplete"
             />
           </v-col>
@@ -105,6 +106,15 @@
             ></v-switch>
 
             <v-text-field
+              v-model="triggerNumber"
+              label="触发数字"
+              type="text"
+              variant="outlined"
+              density="compact"
+              hint="输入此数字后激活魔术模式"
+            ></v-text-field>
+
+            <v-text-field
               v-model.number="operationCount"
               label="操作次数"
               type="number"
@@ -158,9 +168,9 @@ export default {
     const targetSecond = ref(33)
     const padZeros = ref(true)
     const operationCount = ref(5)
+    const triggerNumber = ref('888')
     
     // Magic mode state
-    const magicNumbers = ref([])
     const magicTarget = ref(0)
 
     const calculatedTarget = computed(() => {
@@ -182,40 +192,11 @@ export default {
       return `${year}${month}${day}${hour}${minute}${second}`
     })
 
-    const generateMagicNumbers = (target, count) => {
-      const MIN_VALUE_PERCENTAGE = 0.1 // Each number should be at least 10% of the average
-      const numbers = []
-      let remaining = parseInt(target)
-      
-      // Generate random numbers that sum to target
-      for (let i = 0; i < count - 1; i++) {
-        // Generate a random portion of the remaining value
-        const maxValue = Math.floor(remaining / (count - i))
-        const minValue = Math.floor(maxValue * MIN_VALUE_PERCENTAGE)
-        const randomNum = Math.floor(Math.random() * (maxValue - minValue + 1)) + minValue
-        numbers.push(randomNum)
-        remaining -= randomNum
-      }
-      
-      // Last number is whatever remains
-      numbers.push(remaining)
-      
-      // Shuffle the array
-      for (let i = numbers.length - 1; i > 0; i--) {
-        const j = Math.floor(Math.random() * (i + 1));
-        [numbers[i], numbers[j]] = [numbers[j], numbers[i]]
-      }
-      
-      return numbers
-    }
-
     const applySettings = () => {
       if (magicMode.value) {
         const target = calculatedTarget.value
         magicTarget.value = parseInt(target)
-        magicNumbers.value = generateMagicNumbers(target, operationCount.value)
       } else {
-        magicNumbers.value = []
         magicTarget.value = 0
       }
       settingsDialog.value = false
@@ -225,7 +206,6 @@ export default {
       // Reset magic mode after showing result
       setTimeout(() => {
         magicMode.value = false
-        magicNumbers.value = []
         magicTarget.value = 0
       }, 3000)
     }
@@ -241,8 +221,8 @@ export default {
       targetSecond,
       padZeros,
       operationCount,
+      triggerNumber,
       calculatedTarget,
-      magicNumbers,
       magicTarget,
       applySettings,
       onMagicComplete
