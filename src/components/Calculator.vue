@@ -1,26 +1,78 @@
 <template>
-  <v-card elevation="8" class="calculator-card">
-    <v-card-text>
-      <!-- Display -->
-      <div class="display-container mb-4">
-        <div class="display">
-          {{ displayValue }}
-        </div>
-      </div>
-
-      <!-- Calculator Buttons -->
-      <v-row dense>
-        <v-col cols="3" v-for="button in buttons" :key="button.value">
-          <v-btn
-            :color="button.color || 'grey-lighten-1'"
-            :variant="button.variant || 'elevated'"
-            size="x-large"
-            block
-            @click="handleButtonClick(button)"
-            class="calculator-button"
+  <v-card class="mx-auto rounded-xl" elevation="0" border max-width="1200">
+    <v-card-text class="pa-0">
+      <v-row no-gutters>
+        <!-- Calculator Area -->
+        <v-col cols="12" md="7" lg="8" class="pa-6">
+          <!-- Display -->
+          <v-sheet
+            class="d-flex align-end justify-end mb-6 px-4 py-2 rounded-lg bg-surface-variant"
+            height="120"
+            elevation="0"
           >
-            {{ button.label }}
-          </v-btn>
+            <div class="text-h3 font-weight-medium text-truncate w-100 text-right">
+              {{ displayValue }}
+            </div>
+          </v-sheet>
+
+          <!-- Keypad -->
+          <v-row dense>
+            <v-col cols="3" v-for="button in buttons" :key="button.value">
+              <v-btn
+                :color="button.color"
+                :variant="button.variant || 'text'"
+                height="72"
+                block
+                class="text-h5 font-weight-regular rounded-lg"
+                @click="handleButtonClick(button)"
+              >
+                {{ button.label }}
+              </v-btn>
+            </v-col>
+          </v-row>
+        </v-col>
+
+        <!-- Divider for mobile/desktop -->
+        <v-divider vertical class="hidden-sm-and-down"></v-divider>
+        <v-divider class="hidden-md-and-up"></v-divider>
+
+        <!-- History Area -->
+        <v-col cols="12" md="5" lg="4" class="bg-grey-lighten-5">
+          <div class="d-flex flex-column h-100 pa-4">
+            <div class="text-overline text-medium-emphasis mb-2">History</div>
+            
+            <v-sheet 
+              class="flex-grow-1 bg-transparent overflow-y-auto" 
+              style="max-height: 400px; min-height: 200px;"
+            >
+              <div v-if="historyItems.length === 0" class="text-body-2 text-medium-emphasis pa-2">
+                No calculations yet
+              </div>
+              
+              <v-list v-else bg-color="transparent" density="compact" class="pa-0">
+                <v-list-item
+                  v-for="(item, index) in historyItems"
+                  :key="`${index}-${item}`"
+                  class="px-2 mb-1 rounded"
+                >
+                  <template v-slot:title>
+                    <div class="text-right text-body-1 font-weight-regular">{{ item }}</div>
+                  </template>
+                </v-list-item>
+              </v-list>
+            </v-sheet>
+            
+            <div class="mt-auto pt-2 text-center" v-if="historyItems.length > 0">
+              <v-btn
+                variant="text"
+                size="small"
+                color="medium-emphasis"
+                @click="clearHistoryOnly"
+              >
+                Clear History
+              </v-btn>
+            </div>
+          </div>
         </v-col>
       </v-row>
     </v-card-text>
@@ -53,99 +105,155 @@ export default {
   emits: ['complete'],
   setup(props, { emit }) {
     const currentValue = ref('0')
-    const previousValue = ref(null)
-    const operation = ref(null)
+    const pendingValue = ref(null)
+    const pendingOperation = ref(null)
     const shouldResetDisplay = ref(false)
+    const historyItems = ref([])
+    const calculationFinalized = ref(false)
     
     // Magic mode state
     const magicActive = ref(false)
-    const magicInitialValue = ref(0)
-    const magicRunningTotal = ref(0)
-    const magicOperationsCompleted = ref(0)
     const magicNumbers = ref([])
-    const magicCurrentIndex = ref(0)
-    const magicCurrentDigitIndex = ref(0) // Track position within current magic number's digits
-    const magicCurrentNumberDigits = ref([]) // Current magic number as array of digits
+    const magicRandomIndex = ref(0)
+    const magicPlannedInput = ref('')
+    const magicCurrentDigitIndex = ref(0)
+    const magicInputBlocked = ref(false)
 
     const displayValue = computed(() => {
-      return currentValue.value
+      return currentValue.value === '' ? '' : currentValue.value
     })
 
+    const operatorLabelMap = {
+      add: '+',
+      subtract: '−',
+      multiply: '×',
+      divide: '÷'
+    }
+
+    // Modern color palette
+    // Numbers: Default text color (usually black/dark grey), variant 'text'
+    // Actions (C, BS): Error color, variant 'text'
+    // Operators: Primary color, variant 'tonal'
+    // Equals: Primary color, variant 'flat' (filled)
+    
     const buttons = [
-      { label: 'C', value: 'clear', color: 'red-lighten-1' },
-      { label: '÷', value: 'divide', color: 'orange' },
-      { label: '×', value: 'multiply', color: 'orange' },
-      { label: '⌫', value: 'backspace', color: 'grey' },
+      { label: 'C', value: 'clear', color: 'error', variant: 'text' },
+      { label: '÷', value: 'divide', color: 'primary', variant: 'tonal' },
+      { label: '×', value: 'multiply', color: 'primary', variant: 'tonal' },
+      { label: '⌫', value: 'backspace', color: 'medium-emphasis', variant: 'text' },
       
       { label: '7', value: '7' },
       { label: '8', value: '8' },
       { label: '9', value: '9' },
-      { label: '-', value: 'subtract', color: 'orange' },
+      { label: '−', value: 'subtract', color: 'primary', variant: 'tonal' },
       
       { label: '4', value: '4' },
       { label: '5', value: '5' },
       { label: '6', value: '6' },
-      { label: '+', value: 'add', color: 'orange' },
+      { label: '+', value: 'add', color: 'primary', variant: 'tonal' },
       
       { label: '1', value: '1' },
       { label: '2', value: '2' },
       { label: '3', value: '3' },
-      { label: '=', value: 'equals', color: 'green', variant: 'elevated' },
+      { label: '=', value: 'equals', color: 'primary', variant: 'flat' },
       
       { label: '0', value: '0' },
       { label: '.', value: '.' },
-      { label: '', value: 'empty' },
-      { label: '', value: 'empty2' }
+      { label: '', value: 'empty', disabled: true },
+      { label: '', value: 'empty2', disabled: true }
     ]
 
-    const generateMagicNumbers = () => {
-      const MIN_VALUE_PERCENTAGE = 0.1
+    const getMagicBaseValue = () => {
+      if (pendingValue.value !== null && (currentValue.value === '' || shouldResetDisplay.value)) {
+        return pendingValue.value
+      }
+
+      if (currentValue.value === '' || currentValue.value === 'error') {
+        return pendingValue.value ?? 0
+      }
+
+      const parsed = parseFloat(currentValue.value)
+      return Number.isNaN(parsed) ? 0 : parsed
+    }
+
+    const generateMagicNumbers = (total) => {
+      const safeTotal = Math.max(0, Math.floor(Number(total) || 0))
+      const count = Math.max(1, Math.floor(Number(props.operationCount) || 1))
       const numbers = []
-      const target = props.magicTarget - magicInitialValue.value
-      let remaining = target
-      const count = props.operationCount
-      
-      // Generate random numbers that sum to (target - initial value)
+      let remaining = safeTotal
+
       for (let i = 0; i < count - 1; i++) {
-        const maxValue = Math.floor(remaining / (count - i))
-        const minValue = Math.floor(maxValue * MIN_VALUE_PERCENTAGE)
-        const randomNum = Math.floor(Math.random() * (maxValue - minValue + 1)) + minValue
+        const randomNum = remaining > 0 ? Math.floor(Math.random() * (remaining + 1)) : 0
         numbers.push(randomNum)
         remaining -= randomNum
       }
-      
-      // Last number is whatever remains
-      numbers.push(remaining)
-      
-      // Shuffle the array
+
+      numbers.push(Math.max(0, remaining))
+
       for (let i = numbers.length - 1; i > 0; i--) {
-        const j = Math.floor(Math.random() * (i + 1));
-        [numbers[i], numbers[j]] = [numbers[j], numbers[i]]
+        const j = Math.floor(Math.random() * (i + 1))
+        ;[numbers[i], numbers[j]] = [numbers[j], numbers[i]]
       }
-      
+
       return numbers
+    }
+
+    const checkActivateByFunctionKey = () => {
+      if (!props.magicEnabled || magicActive.value || !props.triggerNumber) {
+        return false
+      }
+      return currentValue.value === props.triggerNumber
+    }
+
+    const refreshMagicPlannedInput = () => {
+      if (!magicActive.value) {
+        return
+      }
+
+      const target = Math.max(0, Number(props.magicTarget) || 0)
+      const base = getMagicBaseValue()
+
+      if (base > target) {
+        currentValue.value = 'error'
+        magicNumbers.value = []
+        magicRandomIndex.value = 0
+        magicPlannedInput.value = ''
+        magicCurrentDigitIndex.value = 0
+        magicInputBlocked.value = true
+        return
+      }
+
+      const nextValue = magicRandomIndex.value < magicNumbers.value.length
+        ? magicNumbers.value[magicRandomIndex.value]
+        : (target - base)
+
+      magicPlannedInput.value = String(Math.max(0, Math.floor(Number(nextValue) || 0)))
+      magicCurrentDigitIndex.value = 0
+      magicInputBlocked.value = false
+      currentValue.value = ''
+      shouldResetDisplay.value = false
     }
 
     const activateMagicMode = () => {
       magicActive.value = true
-      magicInitialValue.value = parseFloat(currentValue.value)
-      magicRunningTotal.value = magicInitialValue.value
-      magicOperationsCompleted.value = 0
-      magicCurrentIndex.value = 0
-      magicCurrentDigitIndex.value = 0
-      magicCurrentNumberDigits.value = []
-      magicNumbers.value = generateMagicNumbers()
-      shouldResetDisplay.value = true
-    }
+      const target = Math.max(0, Number(props.magicTarget) || 0)
+      const base = getMagicBaseValue()
 
-    const checkTriggerNumber = () => {
-      if (props.magicEnabled && !magicActive.value && props.triggerNumber) {
-        if (currentValue.value === props.triggerNumber) {
-          activateMagicMode()
-          return true
-        }
+      if (base > target) {
+        currentValue.value = 'error'
+        magicNumbers.value = []
+        magicRandomIndex.value = 0
+        magicPlannedInput.value = ''
+        magicCurrentDigitIndex.value = 0
+        magicInputBlocked.value = true
+        return
       }
-      return false
+
+      magicNumbers.value = generateMagicNumbers(target - base)
+      magicRandomIndex.value = 0
+      magicCurrentDigitIndex.value = 0
+      magicPlannedInput.value = ''
+      magicInputBlocked.value = false
     }
 
     const handleButtonClick = (button) => {
@@ -180,43 +288,75 @@ export default {
       }
     }
 
+    const calculateBinary = (left, right, op) => {
+      switch (op) {
+        case 'add':
+          return left + right
+        case 'subtract':
+          return left - right
+        case 'multiply':
+          return left * right
+        case 'divide':
+          return right !== 0 ? left / right : 0
+        default:
+          return right
+      }
+    }
+
+    const replaceLastHistoryOperator = (op) => {
+      if (historyItems.value.length === 0) {
+        return
+      }
+      const lastIndex = historyItems.value.length - 1
+      const operatorRegex = /\s[+\-×÷]$/
+      if (operatorRegex.test(historyItems.value[lastIndex])) {
+        historyItems.value[lastIndex] = historyItems.value[lastIndex].replace(operatorRegex, ` ${operatorLabelMap[op]}`)
+      }
+    }
+
+    const clearHistoryForNextSession = () => {
+      if (!calculationFinalized.value) {
+        return
+      }
+      historyItems.value = []
+      calculationFinalized.value = false
+    }
+
+    const clearHistoryOnly = () => {
+      historyItems.value = []
+    }
+
+    const onMagicInputCommitted = () => {
+      if (!magicActive.value) {
+        return
+      }
+      if (magicPlannedInput.value !== '' && magicRandomIndex.value < magicNumbers.value.length) {
+        magicRandomIndex.value++
+      }
+      magicCurrentDigitIndex.value = 0
+      magicPlannedInput.value = ''
+      magicInputBlocked.value = false
+    }
+
     const inputNumber = (num) => {
+      clearHistoryForNextSession()
+
       if (magicActive.value) {
-        // In magic mode, check if we've reached target or completed operations
-        if (magicRunningTotal.value >= props.magicTarget || 
-            magicOperationsCompleted.value >= props.operationCount) {
-          return // Don't allow more input
+        if (magicInputBlocked.value) {
+          return
         }
-        
-        // If we need to load a new magic number
-        if (magicCurrentDigitIndex.value === 0 || magicCurrentNumberDigits.value.length === 0) {
-          // Check if operations exceeded - show remaining value instead
-          if (magicOperationsCompleted.value >= props.operationCount) {
-            const remaining = props.magicTarget - magicRunningTotal.value
-            if (remaining > 0) {
-              magicCurrentNumberDigits.value = String(remaining).split('')
-            } else {
-              return // No remaining value, block input
-            }
-          } else if (magicCurrentIndex.value < magicNumbers.value.length) {
-            // Load next magic number as digit array
-            magicCurrentNumberDigits.value = String(magicNumbers.value[magicCurrentIndex.value]).split('')
-            magicCurrentIndex.value++
-          } else {
-            return // No more magic numbers available
+
+        if (!magicPlannedInput.value) {
+          refreshMagicPlannedInput()
+          if (magicInputBlocked.value || !magicPlannedInput.value) {
+            return
           }
-          
-          // Reset display for new number - FIXED: properly clear display
-          currentValue.value = '0'
-          magicCurrentDigitIndex.value = 0
         }
-        
-        // Show one digit at a time
-        if (magicCurrentDigitIndex.value < magicCurrentNumberDigits.value.length) {
-          const digit = magicCurrentNumberDigits.value[magicCurrentDigitIndex.value]
+
+        if (magicCurrentDigitIndex.value < magicPlannedInput.value.length) {
+          const digit = magicPlannedInput.value[magicCurrentDigitIndex.value]
           
-          // Build up the number digit by digit
-          if (currentValue.value === '0') {
+          if (currentValue.value === '0' || currentValue.value === '') {
             currentValue.value = digit
           } else {
             currentValue.value += digit
@@ -224,18 +364,15 @@ export default {
           
           shouldResetDisplay.value = false
           magicCurrentDigitIndex.value++
-          
-          // If we've shown all digits of current number, reset for next number
-          if (magicCurrentDigitIndex.value >= magicCurrentNumberDigits.value.length) {
-            magicCurrentDigitIndex.value = 0
-            magicCurrentNumberDigits.value = []
+
+          if (magicCurrentDigitIndex.value >= magicPlannedInput.value.length) {
+            magicInputBlocked.value = true
           }
         }
         
         return
       }
 
-      // Normal calculator input
       if (shouldResetDisplay.value) {
         currentValue.value = num === '.' ? '0.' : num
         shouldResetDisplay.value = false
@@ -248,123 +385,105 @@ export default {
           : currentValue.value + num
       }
 
-      // Check if trigger number was entered
-      checkTriggerNumber()
     }
 
     const handleOperation = (op) => {
-      if (magicActive.value) {
-        // In magic mode, only allow addition
-        if (op !== 'add') {
-          return
-        }
+      clearHistoryForNextSession()
+      const activateAfterOperation = checkActivateByFunctionKey()
 
-        // Check if we've reached target or completed operations
-        if (magicRunningTotal.value >= props.magicTarget || 
-            magicOperationsCompleted.value >= props.operationCount) {
-          return
+      if (pendingValue.value !== null && (currentValue.value === '' || shouldResetDisplay.value)) {
+        pendingOperation.value = op
+        replaceLastHistoryOperator(op)
+        if (magicActive.value) {
+          refreshMagicPlannedInput()
         }
-
-        // Skip adding if no valid current number to add (first + after trigger)
-        if (shouldResetDisplay.value) {
-          shouldResetDisplay.value = false
-          return
-        }
-
-        // Calculate the addition
-        const currentNum = parseFloat(currentValue.value)
-        magicRunningTotal.value += currentNum
-        
-        // Ensure we don't exceed target
-        if (magicRunningTotal.value > props.magicTarget) {
-          magicRunningTotal.value = props.magicTarget
-        }
-        
-        currentValue.value = String(magicRunningTotal.value)
-        magicOperationsCompleted.value++
-        shouldResetDisplay.value = true
-        
-        // Reset digit tracking for next number
-        magicCurrentDigitIndex.value = 0
-        magicCurrentNumberDigits.value = []
-
-        // Check if we've reached the target
-        if (magicRunningTotal.value >= props.magicTarget || 
-            magicOperationsCompleted.value >= props.operationCount) {
-          currentValue.value = String(props.magicTarget)
-          emit('complete')
-          setTimeout(() => {
-            resetMagicMode()
-          }, 2000)
+        if (activateAfterOperation) {
+          activateMagicMode()
         }
         return
       }
 
-      // Normal calculator operation
-      if (previousValue.value !== null && operation.value && !shouldResetDisplay.value) {
-        calculate()
+      const enteredValue = currentValue.value === '' ? '0' : currentValue.value
+      const currentNum = parseFloat(enteredValue)
+
+      if (pendingValue.value === null) {
+        pendingValue.value = currentNum
+      } else if (pendingOperation.value !== null) {
+        pendingValue.value = calculateBinary(pendingValue.value, currentNum, pendingOperation.value)
       }
-      previousValue.value = parseFloat(currentValue.value)
-      operation.value = op
+
+      historyItems.value.push(`${enteredValue} ${operatorLabelMap[op]}`)
+      onMagicInputCommitted()
+
+      pendingOperation.value = op
+      currentValue.value = ''
       shouldResetDisplay.value = true
+
+      if (magicActive.value) {
+        refreshMagicPlannedInput()
+      }
+
+      if (activateAfterOperation) {
+        activateMagicMode()
+      }
     }
 
     const handleEquals = () => {
-      if (magicActive.value) {
-        // In magic mode, equals shows the final target
-        currentValue.value = String(props.magicTarget)
-        emit('complete')
-        setTimeout(() => {
-          resetMagicMode()
-        }, 2000)
+      const activateAfterEquals = checkActivateByFunctionKey()
+
+      if (pendingValue.value === null || pendingOperation.value === null) {
+        if (activateAfterEquals) {
+          activateMagicMode()
+        }
         return
       }
 
-      // Normal calculator equals
-      if (previousValue.value !== null && operation.value) {
-        calculate()
+      if (currentValue.value === '' || shouldResetDisplay.value) {
+        if (activateAfterEquals) {
+          activateMagicMode()
+        }
+        return
       }
-    }
 
-    const calculate = () => {
-      const prev = previousValue.value
-      const current = parseFloat(currentValue.value)
-      let result = 0
-
-      switch (operation.value) {
-        case 'add':
-          result = prev + current
-          break
-        case 'subtract':
-          result = prev - current
-          break
-        case 'multiply':
-          result = prev * current
-          break
-        case 'divide':
-          result = current !== 0 ? prev / current : 0
-          break
-      }
+      const enteredValue = currentValue.value
+      const currentNum = parseFloat(enteredValue)
+      const result = calculateBinary(pendingValue.value, currentNum, pendingOperation.value)
 
       currentValue.value = String(result)
-      previousValue.value = null
-      operation.value = null
+      historyItems.value.push(`${enteredValue} = ${result}`)
+      onMagicInputCommitted()
+      pendingValue.value = null
+      pendingOperation.value = null
       shouldResetDisplay.value = true
+      calculationFinalized.value = true
+
+      if (magicActive.value && result === (Number(props.magicTarget) || 0)) {
+        emit('complete')
+      }
+
+      if (activateAfterEquals) {
+        activateMagicMode()
+      }
     }
 
     const clear = () => {
       currentValue.value = '0'
-      previousValue.value = null
-      operation.value = null
+      pendingValue.value = null
+      pendingOperation.value = null
       shouldResetDisplay.value = false
+      historyItems.value = []
+      calculationFinalized.value = false
       resetMagicMode()
     }
 
     const backspace = () => {
-      if (magicActive.value) {
-        return // Don't allow backspace in magic mode
+      clearHistoryForNextSession()
+
+      if (currentValue.value === 'error') {
+        currentValue.value = '0'
+        return
       }
-      
+
       if (currentValue.value.length > 1) {
         currentValue.value = currentValue.value.slice(0, -1)
       } else {
@@ -374,13 +493,11 @@ export default {
 
     const resetMagicMode = () => {
       magicActive.value = false
-      magicInitialValue.value = 0
-      magicRunningTotal.value = 0
-      magicOperationsCompleted.value = 0
-      magicCurrentIndex.value = 0
-      magicCurrentDigitIndex.value = 0
-      magicCurrentNumberDigits.value = []
       magicNumbers.value = []
+      magicRandomIndex.value = 0
+      magicPlannedInput.value = ''
+      magicCurrentDigitIndex.value = 0
+      magicInputBlocked.value = false
     }
 
     // Watch for magic enabled changes
@@ -392,52 +509,15 @@ export default {
 
     return {
       displayValue,
+      historyItems,
       buttons,
-      handleButtonClick
+      handleButtonClick,
+      clearHistoryOnly
     }
   }
 }
 </script>
 
 <style scoped>
-.calculator-card {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  padding: 16px;
-}
-
-.display-container {
-  background-color: #1a1a1a;
-  border-radius: 8px;
-  padding: 16px;
-  min-height: 80px;
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-}
-
-.display {
-  color: #00ff00;
-  font-size: 2.5rem;
-  font-family: 'Courier New', monospace;
-  text-align: right;
-  word-break: break-all;
-  font-weight: bold;
-}
-
-.calculator-button {
-  height: 70px;
-  font-size: 1.5rem;
-  font-weight: bold;
-}
-
-@media (max-width: 600px) {
-  .display {
-    font-size: 1.8rem;
-  }
-  
-  .calculator-button {
-    height: 60px;
-    font-size: 1.2rem;
-  }
-}
+/* Optional: slightly denser button text if needed, but text-h5 is usually good */
 </style>

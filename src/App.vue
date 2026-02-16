@@ -11,7 +11,7 @@
     <v-main>
       <v-container class="fill-height" fluid>
         <v-row justify="center" align="center">
-          <v-col cols="12" sm="8" md="6" lg="4">
+          <v-col cols="12" sm="10" md="10" lg="8">
             <Calculator 
               :magic-enabled="magicMode"
               :trigger-number="triggerNumber"
@@ -99,6 +99,15 @@
               density="compact"
             ></v-text-field>
 
+            <v-btn
+              variant="tonal"
+              color="primary"
+              class="mb-4"
+              @click="setOneMinuteLater"
+            >
+              设为一分钟后
+            </v-btn>
+
             <v-switch
               v-model="padZeros"
               label="日期补零"
@@ -116,7 +125,7 @@
 
             <v-text-field
               v-model.number="operationCount"
-              label="操作次数"
+              label="期望操作次数"
               type="number"
               min="2"
               max="10"
@@ -147,7 +156,7 @@
 </template>
 
 <script>
-import { ref, computed, watch } from 'vue'
+import { ref, computed } from 'vue'
 import Calculator from './components/Calculator.vue'
 
 export default {
@@ -157,24 +166,21 @@ export default {
   },
   setup() {
     const settingsDialog = ref(false)
-    const magicMode = ref(false)
+    const magicMode = ref(true)
     
     // Date/time settings
-    const targetYear = ref(2026)
+    const targetYear = ref(26)
     const targetMonth = ref(2)
     const targetDay = ref(6)
     const targetHour = ref(22)
     const targetMinute = ref(33)
     const targetSecond = ref(33)
-    const padZeros = ref(true)
+    const padZeros = ref(false)
     const operationCount = ref(5)
     const triggerNumber = ref('888')
     
-    // Magic mode state
-    const magicTarget = ref(0)
-
     const calculatedTarget = computed(() => {
-      const year = targetYear.value
+      const year = String(targetYear.value)
       let month = targetMonth.value
       let day = targetDay.value
       let hour = targetHour.value
@@ -192,6 +198,19 @@ export default {
       return `${year}${month}${day}${hour}${minute}${second}`
     })
 
+    // Magic mode state
+    const magicTarget = ref(parseInt(calculatedTarget.value))
+
+    const setOneMinuteLater = () => {
+      const future = new Date(Date.now() + 60 * 1000)
+      targetYear.value = future.getFullYear() % 100
+      targetMonth.value = future.getMonth() + 1
+      targetDay.value = future.getDate()
+      targetHour.value = future.getHours()
+      targetMinute.value = future.getMinutes()
+      targetSecond.value = future.getSeconds()
+    }
+
     const applySettings = () => {
       if (magicMode.value) {
         const target = calculatedTarget.value
@@ -203,11 +222,9 @@ export default {
     }
 
     const onMagicComplete = () => {
-      // Reset magic mode after showing result
-      setTimeout(() => {
-        magicMode.value = false
-        magicTarget.value = 0
-      }, 3000)
+      if (magicMode.value) {
+        magicTarget.value = parseInt(calculatedTarget.value)
+      }
     }
 
     return {
@@ -224,6 +241,7 @@ export default {
       triggerNumber,
       calculatedTarget,
       magicTarget,
+      setOneMinuteLater,
       applySettings,
       onMagicComplete
     }
