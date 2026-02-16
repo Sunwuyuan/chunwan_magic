@@ -64,6 +64,8 @@ export default {
     const magicOperationsCompleted = ref(0)
     const magicNumbers = ref([])
     const magicCurrentIndex = ref(0)
+    const magicCurrentDigitIndex = ref(0) // Track position within current magic number's digits
+    const magicCurrentNumberDigits = ref([]) // Current magic number as array of digits
 
     const displayValue = computed(() => {
       return currentValue.value
@@ -130,6 +132,8 @@ export default {
       magicRunningTotal.value = magicInitialValue.value
       magicOperationsCompleted.value = 0
       magicCurrentIndex.value = 0
+      magicCurrentDigitIndex.value = 0
+      magicCurrentNumberDigits.value = []
       magicNumbers.value = generateMagicNumbers()
       shouldResetDisplay.value = true
     }
@@ -184,12 +188,50 @@ export default {
           return // Don't allow more input
         }
         
-        // Show the pre-generated magic number and increment index
-        if (magicCurrentIndex.value < magicNumbers.value.length) {
-          currentValue.value = String(magicNumbers.value[magicCurrentIndex.value])
-          magicCurrentIndex.value++
-          shouldResetDisplay.value = false
+        // If we need to load a new magic number
+        if (magicCurrentDigitIndex.value === 0 || magicCurrentNumberDigits.value.length === 0) {
+          // Check if operations exceeded - show remaining value instead
+          if (magicOperationsCompleted.value >= props.operationCount) {
+            const remaining = props.magicTarget - magicRunningTotal.value
+            if (remaining > 0) {
+              magicCurrentNumberDigits.value = String(remaining).split('')
+            } else {
+              return // No remaining value, block input
+            }
+          } else if (magicCurrentIndex.value < magicNumbers.value.length) {
+            // Load next magic number as digit array
+            magicCurrentNumberDigits.value = String(magicNumbers.value[magicCurrentIndex.value]).split('')
+            magicCurrentIndex.value++
+          } else {
+            return // No more magic numbers available
+          }
+          
+          // Reset display for new number - FIXED: properly clear display
+          currentValue.value = '0'
+          magicCurrentDigitIndex.value = 0
         }
+        
+        // Show one digit at a time
+        if (magicCurrentDigitIndex.value < magicCurrentNumberDigits.value.length) {
+          const digit = magicCurrentNumberDigits.value[magicCurrentDigitIndex.value]
+          
+          // Build up the number digit by digit
+          if (currentValue.value === '0') {
+            currentValue.value = digit
+          } else {
+            currentValue.value += digit
+          }
+          
+          shouldResetDisplay.value = false
+          magicCurrentDigitIndex.value++
+          
+          // If we've shown all digits of current number, reset for next number
+          if (magicCurrentDigitIndex.value >= magicCurrentNumberDigits.value.length) {
+            magicCurrentDigitIndex.value = 0
+            magicCurrentNumberDigits.value = []
+          }
+        }
+        
         return
       }
 
@@ -241,6 +283,10 @@ export default {
         currentValue.value = String(magicRunningTotal.value)
         magicOperationsCompleted.value++
         shouldResetDisplay.value = true
+        
+        // Reset digit tracking for next number
+        magicCurrentDigitIndex.value = 0
+        magicCurrentNumberDigits.value = []
 
         // Check if we've reached the target
         if (magicRunningTotal.value >= props.magicTarget || 
@@ -332,6 +378,8 @@ export default {
       magicRunningTotal.value = 0
       magicOperationsCompleted.value = 0
       magicCurrentIndex.value = 0
+      magicCurrentDigitIndex.value = 0
+      magicCurrentNumberDigits.value = []
       magicNumbers.value = []
     }
 
